@@ -1,6 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-
+from .constants import HOURLY_RATE, DAILY_RATE, MONTHLY_RATE, SERVICE_COMMISSION_PERCENTAGE
 from django.utils import timezone
 
 class User(AbstractUser):
@@ -24,6 +24,8 @@ class Address(models.Model):
         return f"{self.street}, {self.city}, {self.zip_code}, {self.country}"
 
 
+from django.db import models
+
 class ParkingSpot(models.Model):
     name = models.CharField(max_length=100)
     hourly_rate = models.DecimalField(max_digits=5, decimal_places=2)
@@ -39,6 +41,7 @@ class ParkingSpot(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class ParkingReservation(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reservations')
