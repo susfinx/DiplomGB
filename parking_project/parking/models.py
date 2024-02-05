@@ -1,17 +1,24 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-from .constants import HOURLY_RATE, DAILY_RATE, MONTHLY_RATE, SERVICE_COMMISSION_PERCENTAGE
+from .constants import HOURLY_RATE, DAILY_RATE, MONTHLY_RATE
 from django.utils import timezone
 
 class User(AbstractUser):
-    is_owner = models.BooleanField(default=False, help_text="Указывает, является ли пользователь владельцем парковочного места.")
-
+    is_owner = models.BooleanField(default=False,help_text="Указывает, является ли пользователь владельцем парковочного места.")
 class Owner(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='owner_profile')
     bank_details = models.CharField(max_length=100)
 
     def __str__(self):
         return self.user.username
+
+class QRCode(models.Model):
+    name = models.CharField(max_length=100, blank=True)
+    image = models.BinaryField()
+    parking_spot = models.ForeignKey('ParkingSpot', on_delete=models.CASCADE, related_name='qr_codes')
+
+    def __str__(self):
+        return self.name
 
 class Address(models.Model):
     street = models.CharField(max_length=255)
@@ -24,13 +31,12 @@ class Address(models.Model):
         return f"{self.street}, {self.city}, {self.zip_code}, {self.country}"
 
 
-from django.db import models
 
 class ParkingSpot(models.Model):
     name = models.CharField(max_length=100)
-    hourly_rate = models.DecimalField(max_digits=5, decimal_places=2)
-    daily_rate = models.DecimalField(max_digits=5, decimal_places=2)
-    monthly_rate = models.DecimalField(max_digits=5, decimal_places=2)
+    hourly_rate = models.DecimalField(max_digits=5, decimal_places=2, default=HOURLY_RATE)
+    daily_rate = models.DecimalField(max_digits=5, decimal_places=2, default=DAILY_RATE)
+    monthly_rate = models.DecimalField(max_digits=5, decimal_places=2, default=MONTHLY_RATE)
     owner = models.ForeignKey(Owner, on_delete=models.CASCADE, related_name='parking_spots')
     address = models.OneToOneField(Address, on_delete=models.SET_NULL, null=True, blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
@@ -38,6 +44,23 @@ class ParkingSpot(models.Model):
     is_available_hourly = models.BooleanField(default=True)
     is_available_daily = models.BooleanField(default=True)
     is_available_monthly = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+class ParkingSensor(models.Model):
+    name = models.CharField(max_length=100)
+    is_occupied = models.BooleanField(default=False)
+    parking_spot = models.ForeignKey('ParkingSpot', on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
+
+class Barrier(models.Model):
+    name = models.CharField(max_length=100)
+    is_open = models.BooleanField(default=False)
+    sensor = models.OneToOneField('ParkingSensor', on_delete=models.CASCADE, related_name='barrier')
+    parking_spot = models.ForeignKey('ParkingSpot', on_delete=models.CASCADE, related_name='barriers')
 
     def __str__(self):
         return self.name

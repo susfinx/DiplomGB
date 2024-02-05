@@ -1,20 +1,19 @@
-import qrcode
 from io import BytesIO
-from ..models import ParkingSpot  # Импортируйте модель ParkingSpot
+
+import qrcode
+
+from ..models import  ParkingSpot, QRCode
 
 
 class QRCodeService:
-
     @staticmethod
-    def generate_qr_code(parking_spot_id):
+    def generate_qr_code(parking_spot_name, parking_spot_id):
         """
-        Генерирует QR-код для парковочного места по его ID.
-        QR-код содержит информацию о ID и имени парковочного места.
+        Генерирует QR-код для парковочного места по его имени и ID.
+        QR-код содержит информацию о имени и ID парковочного места.
         """
         try:
-            # Поиск парковочного места по ID
-            parking_spot = ParkingSpot.objects.get(id=parking_spot_id)
-            qr_data = f"Парковочное место: {parking_spot.name}, ID: {parking_spot.id}"
+            qr_data = f"Парковочное место: {parking_spot_name}, ID: {parking_spot_id}"
 
             # Создание QR-кода
             qr = qrcode.QRCode(
@@ -29,16 +28,19 @@ class QRCodeService:
             # Генерация изображения QR-кода
             img = qr.make_image(fill='black', back_color='white')
 
-            # Сохранение изображения в память
+            # Сохранение изображения QR-кода в базе данных
             img_bytes = BytesIO()
-            img.save(img_bytes)
+            img.save(img_bytes, format='PNG')
             img_bytes.seek(0)
 
-            # Возвращаем байты изображения
-            return img_bytes.getvalue()
+            # Сохранение QR-кода в базе данных
+            qr_code = QRCode(name=f"Parking Spot {parking_spot_id}", image=img_bytes.read())
+            qr_code.save()
 
-        except ParkingSpot.DoesNotExist:
+            return qr_code  # Возвращение объекта QRCode, который можно предоставить клиентам
+        except Exception as e:
             return None
+
 
     @staticmethod
     def find_parking_spot_by_qr_data(qr_data):

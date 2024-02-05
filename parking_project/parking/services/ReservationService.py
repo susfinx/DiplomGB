@@ -1,5 +1,5 @@
 from . import PaymentService
-from ..models import ParkingSpot, ParkingReservation, Payment
+from ..models import ParkingSpot, ParkingReservation, Payment, OwnerPayment
 from django.utils import timezone
 from datetime import datetime
 from ..models import Payment
