@@ -6,6 +6,14 @@ class OwnerService:
 
     def add_parking_spot(self, user, name, hourly_rate, daily_rate, monthly_rate, address, latitude, longitude):
         try:
+            # Проверяем, является ли пользователь владельцем
+            owner = Owner.objects.filter(user=user).first()
+
+            # Если пользователь не является владельцем, создаем нового владельца
+            if not owner:
+                owner = Owner(user=user, bank_details="")  # Можете добавить банковские реквизиты по желанию
+                owner.save()
+
             # Проверяем, существует ли адрес в базе данных
             existing_address = Address.objects.filter(
                 street=address['street'],
@@ -57,7 +65,7 @@ class OwnerService:
         except Exception as e:
             # Логирование ошибки
             logging.error(f"Ошибка при добавлении парковочного места: {str(e)}")
-            return f"Произошла ошибка при добавлении парковочного места: {str(e)}"
+            return f"Произошла ошибка при добавлении парковочного места: {str(e)}"gi
 
     def view_parking_spot_history(self, parking_spot, start_date, end_date):
         try:
