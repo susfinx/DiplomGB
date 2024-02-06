@@ -14,3 +14,7 @@ CLOSE_ALL_BARRIER = '*/5'
 
 # Обновление доступности парковки
 UPDATE_AVAILABLYTI = '*/5'
+
+CHECK_EXPIRED = '*/15'
+
+

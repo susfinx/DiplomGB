@@ -196,7 +196,7 @@ class ReservationService:
             # Обработка ошибок, если необходимо
             return []
 
-    def start_hourly_rate(parking_spot_id, user_id):
+    def start_hourly_rate(self,parking_spot_id, user_id):
         try:
             # Получаем парковочное место по ID
             parking_spot = ParkingSpot.objects.get(pk=parking_spot_id)
