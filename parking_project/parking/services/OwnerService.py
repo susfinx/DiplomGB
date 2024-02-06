@@ -13,6 +13,9 @@ class OwnerService:
             if not owner:
                 owner = Owner(user=user, bank_details="")  # Можете добавить банковские реквизиты по желанию
                 owner.save()
+                # Устанавливаем флаг is_owner пользователя в True
+                user.is_owner = True
+                user.save()
 
             # Проверяем, существует ли адрес в базе данных
             existing_address = Address.objects.filter(
@@ -65,7 +68,7 @@ class OwnerService:
         except Exception as e:
             # Логирование ошибки
             logging.error(f"Ошибка при добавлении парковочного места: {str(e)}")
-            return f"Произошла ошибка при добавлении парковочного места: {str(e)}"gi
+            return f"Произошла ошибка при добавлении парковочного места: {str(e)}"
 
     def view_parking_spot_history(self, parking_spot, start_date, end_date):
         try:

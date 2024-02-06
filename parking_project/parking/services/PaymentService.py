@@ -1,3 +1,4 @@
+from decimal import Decimal
 from ..constants import HOURLY_RATE, DAILY_RATE, MONTHLY_RATE, SERVICE_COMMISSION_PERCENTAGE
 from ..models import Payment, OwnerPayment
 
@@ -75,5 +76,23 @@ class PaymentService:
             return owner_payment_history
         except Exception as e:
             return f"Произошла ошибка при получении истории платежей: {str(e)}"
+
+    def calculate_service_fee(self, total_amount):
+        """
+        Рассчитывает комиссию на основе бронирования и общей суммы.
+
+        """
+        # Рассчитываем процент комиссии на основе константы
+        service_fee_percentage = Decimal(SERVICE_COMMISSION_PERCENTAGE) / 100
+
+        # Рассчитываем сумму комиссии как процент от общей суммы
+        service_fee = total_amount * service_fee_percentage
+
+        return service_fee
+
+    def simulate_payment(self):
+        # Возвращает True, предполагая, что оплата всегда проходит успешно
+        return True
+
 
 

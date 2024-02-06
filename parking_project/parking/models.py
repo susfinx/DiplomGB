@@ -59,12 +59,12 @@ class ParkingSensor(models.Model):
 class Barrier(models.Model):
     name = models.CharField(max_length=100)
     is_open = models.BooleanField(default=False)
+    opening_delay = models.BooleanField(default=False)  # Поле задержки открытия (булевое значение)
     sensor = models.OneToOneField('ParkingSensor', on_delete=models.CASCADE, related_name='barrier')
     parking_spot = models.ForeignKey('ParkingSpot', on_delete=models.CASCADE, related_name='barriers')
 
     def __str__(self):
         return self.name
-
 
 class ParkingReservation(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reservations')
@@ -99,3 +99,13 @@ class OwnerPayment(models.Model):
 
     def __str__(self):
         return f"Owner Payment #{self.id}"
+
+class ParkingServiceFee(models.Model):
+    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='service_fees')
+    owner = models.ForeignKey('Owner', on_delete=models.CASCADE, related_name='service_fees')
+    reservation = models.ForeignKey('ParkingReservation', on_delete=models.CASCADE, related_name='service_fees')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    timestamp = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Service Fee for {self.reservation} - {self.timestamp}"

@@ -1,25 +1,26 @@
 from . import PaymentService
-from ..models import ParkingSpot, ParkingReservation, Payment, OwnerPayment
+from .exceptions import PaymentFailedException
+from ..models import  ParkingReservation,ParkingSpot, Payment, OwnerPayment,ParkingServiceFee
 from django.utils import timezone
-from datetime import datetime
-from ..models import Payment
+from datetime import datetime, timedelta
 
 
 class ReservationService:
-    def reserve_spot(self, user, spot, start_time, end_time, tariff):
+    def reserve_spot(self, user,owner, parking_id, start_time, end_time, tariff):
+        # находим выбранную парковку
+        spot=ParkingSpot.objects.get(pk=parking_id)
         try:
-            # Расчитываем сумму оплаты
-            payment_amount = PaymentService.calculate_payment_amount(tariff, start_time, end_time)
-
             # Проверяем доступность парковочного места
             if spot.is_available_hourly or spot.is_available_daily or spot.is_available_monthly:
                 # Проверяем, что указанное время бронирования не пересекается с другими бронированиями
                 existing_reservations = ParkingReservation.objects.filter(
                     parking_spot=spot,
                     end_time__gte=start_time,
-                    reservation_time__lte=end_time,
+                    start_time__lte=end_time,  # Исправлено на start_time__lte
                 )
                 if not existing_reservations.exists():
+                    # Расчитываем сумму оплаты
+                    payment_amount = PaymentService.calculate_payment_amount(tariff, start_time, end_time)
                     # Создаем новое бронирование
                     reservation = ParkingReservation(
                         user=user,
@@ -32,7 +33,7 @@ class ReservationService:
                     spot.update_availability()
 
                     # Создаем запись об оплате
-                    payment = Payment(
+                    payment = Payment (
                         reservation=reservation,
                         user=user,
                         amount=payment_amount,
@@ -41,23 +42,42 @@ class ReservationService:
                     )
                     payment.save()
 
-                    # Вычисляем сумму оплаты владельцу с учетом комиссии
-                    owner_payment_amount = PaymentService.calculate_owner_payment(payment_amount)
-
-                    # Отправляем оплату владельцу
-                    owner_payment = OwnerPayment(
-                        owner=spot.owner,
-                        user=user,
-                        payment=payment,
-                        amount=owner_payment_amount,
+                    # Вычисляем сумму комиссии за сервис
+                    service_fee = PaymentService.calculate_service_fee(payment_amount)
+                    service_fee_entry = ParkingServiceFee(
+                        user=user,  # Пользователь, для которого была комиссия
+                        owner=owner,  # Владелец (если требуется)
+                        reservation=reservation,  # Бронирование (если требуется)
+                        amount=service_fee,  # Сумма комиссии
                     )
-                    owner_payment.save()
+                    service_fee_entry.save()
 
-                    return "Парковочное место успешно забронировано."
+                    # Попытка симулированной оплаты, вернет True если прошла успешно, иначе False
+                    if PaymentService.simulate_payment(self):
+                        # Вычисляем сумму оплаты владельцу с учетом комиссии
+                        owner_payment_amount = payment_amount - service_fee
+
+                        # Отправляем оплату владельцу
+                        owner_payment = OwnerPayment(
+                            owner=spot.owner,
+                            user=user,
+                            payment=payment,
+                            amount=owner_payment_amount,
+                        )
+                        owner_payment.save()
+
+                        return "Парковочное место успешно забронировано."
+                    else:
+                        # Если оплата не прошла, отменяем бронирование
+                        reservation.delete()
+                        raise PaymentFailedException("Оплата не прошла")
+
                 else:
                     return "Указанное время уже забронировано для этого парковочного места."
             else:
                 return "Парковочное место недоступно для бронирования."
+        except PaymentFailedException as e:
+            return str(e)
         except Exception as e:
             return f"Произошла ошибка при бронировании: {str(e)}"
 
@@ -94,42 +114,117 @@ class ReservationService:
         except Exception as e:
             return f"Произошла ошибка при отмене бронирования: {str(e)}"
 
-    def update_availability(self):
+    def check_availability_hourly(self):
+        now = timezone.now()
+        # Найдите бронирования с почасовым тарифом, которые завершились
+        hourly_reservations = ParkingReservation.objects.filter(
+            status="active",
+            end_time__lte=now,
+            tariff="hourly"
+        )
+
+        # Обновите статус парковок, которые освободились после завершения бронирования
+        for reservation in hourly_reservations:
+            parking_spot = reservation.parking_spot
+            if parking_spot.is_available_hourly:
+                parking_spot.is_available_hourly = True
+                parking_spot.save()
+
+    def check_availability_daily(self):
+        now = timezone.now()
+        # Найдите бронирования с посуточным тарифом, которые завершились
+        daily_reservations = ParkingReservation.objects.filter(
+            status="active",
+            end_time__lte=now,
+            tariff="daily"
+        )
+
+        # Обновите статус парковок, которые освободились после завершения бронирования
+        for reservation in daily_reservations:
+            parking_spot = reservation.parking_spot
+            if parking_spot.is_available_daily:
+                parking_spot.is_available_daily = True
+                parking_spot.save()
+
+    def check_availability_monthly(self):
+        now = timezone.now()
+        # Найдите бронирования с помесячным тарифом, которые завершились
+        monthly_reservations = ParkingReservation.objects.filter(
+            status="active",
+            end_time__lte=now,
+            tariff="monthly"
+        )
+
+        # Обновите статус парковок, которые освободились после завершения бронирования
+        for reservation in monthly_reservations:
+            parking_spot = reservation.parking_spot
+            if parking_spot.is_available_monthly:
+                parking_spot.is_available_monthly = True
+                parking_spot.save()
+
+    def update_parking_spot_availability(self):
+        self.check_availability_hourly()
+        self.check_availability_daily()
+        self.check_availability_monthly()
+
+    def find_expired_reservation_and_occupied_sensor(self):
         try:
-            # Получаем все активные бронирования
-            active_reservations = ParkingReservation.objects.filter(
-                status="active",
-                end_time__gte=timezone.now(),
+            # Получаем текущее время
+            current_time = timezone.now()
+
+            # Находим все бронирования, у которых время окончания меньше текущего времени
+            expired_reservations = ParkingReservation.objects.filter(
+                end_time__lt=current_time,
+                status="active"  # Предполагается, что "active" - статус активных бронирований
             )
 
-            # Получаем все парковочные места
-            parking_spots = ParkingSpot.objects.all()
+            # Создаем список для хранения парковок с проблемами
+            problem_parking_spots = []
 
-            # Сначала устанавливаем все места как доступные
-            for spot in parking_spots:
-                spot.is_available_hourly = True
-                spot.is_available_daily = True
-                spot.is_available_monthly = True
-                spot.save()
-
-            # Затем перебираем активные бронирования и обновляем доступность мест
-            for reservation in active_reservations:
+            # Перебираем и проверяем каждое бронирование
+            for reservation in expired_reservations:
                 spot = reservation.parking_spot
+                sensor = spot.sensor
 
-                # Для бронирования на час
-                if reservation.end_time - timezone.now() <= timezone.timedelta(hours=1):
-                    spot.is_available_hourly = False
+                # Проверяем, что датчик говорит, что парковка занята
+                if sensor.is_occupied:
+                    problem_parking_spots.append(spot)
 
-                # Для бронирования на день
-                if reservation.end_time - timezone.now() <= timezone.timedelta(days=1):
-                    spot.is_available_daily = False
+            return problem_parking_spots
 
-                # Для бронирования на месяц
-                if reservation.end_time - timezone.now() <= timezone.timedelta(days=30):
-                    spot.is_available_monthly = False
-
-                spot.save()
-
-            return "Доступность парковочных мест успешно обновлена."
         except Exception as e:
-            return f"Произошла ошибка при обновлении доступности парковочных мест: {str(e)}"
+            # Обработка ошибок, если необходимо
+            return []
+
+    def start_hourly_rate(parking_spot_id, user_id):
+        try:
+            # Получаем парковочное место по ID
+            parking_spot = ParkingSpot.objects.get(pk=parking_spot_id)
+
+            # Проверяем, доступен ли часовой тариф на парковке
+            if not parking_spot.is_hourly_available:
+                # Если часовой тариф недоступен, делаем его доступным
+                parking_spot.is_hourly_available = True
+                parking_spot.save()
+
+            # Создаем бронирование на час и связываем его с пользователем
+            current_time = datetime.now()
+            end_time = current_time + timedelta(hours=1)
+
+            # Создаем запись о бронировании
+            reservation = ParkingReservation.objects.create(
+                parking_spot=parking_spot,
+                start_time=current_time,
+                end_time=end_time,
+                user_id=user_id,  # Связываем бронирование с пользователем
+                status="active",  # Можете задать другой статус, если необходимо
+            )
+
+            reservation.save()
+
+            return "Часовой тариф успешно запущен для парковочного места."
+        except ParkingSpot.DoesNotExist:
+            return "Парковочное место с указанным ID не найдено."
+        except Exception as e:
+            return f"Произошла ошибка при запуске часового тарифа: {str(e)}"
+

@@ -1,50 +1,83 @@
 import logging
+from django.utils import timezone
+from datetime import timedelta, timezone
+from ..constants import BARIER_OPENING_DELAY_MINUTES
+from ..models import Barrier, ParkingReservation
+from parking_project.tasks import close_barrier_delayed
 
 class BarierService:
-    def open_barrier(self, user, sensor_signal):
+
+    def open_barrier(self, user_id, parking_spot_id):
+        # Найти активные бронирования для пользователя на данном парковочном месте
+        reservations = ParkingReservation.objects.filter(
+            user_id=user_id,
+            parking_spot_id=parking_spot_id,
+            end_time__gte=timezone.now(),
+            status="active"
+        )
+        if not reservations.exists():
+            return "Нет активных бронирований для данного пользователя на выбранном парковочном месте."
+
+        # Найти барьер, связанный с указанным парковочным местом
         try:
-            # Проверяем, забронировал ли пользователь парковку
-            if not user.has_reserved_parking():
-                logging.info("Попытка открыть запорный механизм без бронирования")
-                return "Для открытия запорного механизма необходимо забронировать парковку."
+            barrier = Barrier.objects.get(parking_spot_id=parking_spot_id)
+        except Barrier.DoesNotExist:
+            return "Барьер для данного парковочного места не найден."
+
+        # Проверяем сигнал с датчика, связанного с барьером
+        sensor = barrier.sensor
+        if sensor.is_occupied:
+            return "Место занято. Доступ запрещен."
+
+        # Если место свободно, открываем барьер
+        self.open_barrier_mechanism()
+
+        # Создаем время окончания задержки (используя значение из константы)
+
+        barrier.is_open = True  # Отметка об открытии барьера
+        barrier.save()
+
+        delay_end_time = timezone.now() + timedelta(minutes=BARIER_OPENING_DELAY_MINUTES)
+        close_barrier_delayed.apply_async(args=[barrier.pk, delay_end_time], eta=delay_end_time)
+
+        return "Барьер успешно открыт."
+
+    def close_barrier(self, barrier_id):
+        try:
+            barrier = Barrier.objects.get(pk=barrier_id)
+            sensor_signal = barrier.sensor
+
+            # Проверяем, активна ли задержка открытия
+            if barrier.is_open:
+                logging.info(f"Запорный механизм {barrier.name} находится в режиме задержки открытия.")
+                return "Запорный механизм находится в режиме задержки открытия."
 
             # Проверяем сигнал с датчика
-            if not sensor_signal.all_clear():
-                logging.warning("Сигнал с датчика: препятствия на парковке")
-                return "Датчик сигнализирует, что необходимо освободить пространство для открытия запорного механизма."
+            if not sensor_signal.is_occupied:
+                # Если датчик сигнализирует, что место свободно, закрываем механизм
+                logging.info(f"Запорный механизм {barrier.name} успешно закрыт.")
 
-            # Если оба условия выполняются, открываем запорный механизм
-            barrier_status = self.open_barrier_mechanism()
+                self.close_barrier_mechanism(barrier)
 
-            if barrier_status:
-                logging.info("Запорный механизм успешно открыт.")
-                return "Запорный механизм успешно открыт."
-            else:
-                logging.error("Не удалось открыть запорный механизм.")
-                return "Не удалось открыть запорный механизм."
-
-        except Exception as e:
-            logging.error(f"Произошла ошибка при открытии запорного механизма: {str(e)}")
-            return f"Произошла ошибка при открытии запорного механизма: {str(e)}"
-
-
-    def close_barrier(self, sensor_signal):
-        try:
-            # Проверяем сигнал с датчика
-            if sensor_signal.all_clear():
-                # Если датчик сигнализирует, что ничего не мешает, закрываем механизм
-                logging.info("Запорный механизм успешно закрыт.")
-                self.close_barrier_mechanism()
+                barrier.is_open = False  # Обновляем статус барьера как закрытый
+                barrier.save()
                 return "Запорный механизм успешно закрыт."
+            else:
+                # Если датчик сигнализирует о препятствии
+                logging.warning(f"Сигнал с датчика для {barrier.name}: препятствия на парковке")
+                return "Невозможно закрыть запорный механизм из-за препятствий."
 
-            # Если датчик не позволяет закрыть механизм из-за препятствий
-            logging.warning("Сигнал с датчика: препятствия на парковке")
-            return "Невозможно закрыть запорный механизм из-за препятствий."
-
+        except Barrier.DoesNotExist:
+            logging.error(f"Барьер с ID {barrier_id} не найден.")
+            return f"Барьер с ID {barrier_id} не найден."
         except Exception as e:
-            logging.error(f"Произошла ошибка при закрытии запорного механизма: {str(e)}")
-            return f"Произошла ошибка при закрытии запорного механизма: {str(e)}"
+            logging.error(f"Произошла ошибка при закрытии запорного механизма: {e}")
+            return f"Произошла ошибка при закрытии запорного механизма: {e}"
 
-    def close_barrier_mechanism(self):
+    def close_barrier_mechanism(self, barrier):
+        # Реализация закрытия механизма
+        pass
+
+    def open_barrier_mechanism(self, barrier):
         # Реализация закрытия механизма
         pass
