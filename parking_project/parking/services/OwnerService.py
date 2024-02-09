@@ -1,9 +1,13 @@
 import logging
+
+from django.db import transaction
+
 from ..models import Owner, Address, ParkingSpot, ParkingSensor, Barrier, ParkingReservation, OwnerPayment
 from ..services import QRCodeService
 
 class OwnerService:
 
+    @transaction.atomic
     def add_parking_spot(self, user, name, hourly_rate, daily_rate, monthly_rate, address, latitude, longitude):
         try:
             # Проверяем, является ли пользователь владельцем

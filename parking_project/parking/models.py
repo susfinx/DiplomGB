@@ -5,8 +5,9 @@ from django.utils import timezone
 
 class User(AbstractUser):
     is_owner = models.BooleanField(default=False,help_text="Указывает, является ли пользователь владельцем парковочного места.")
+
 class Owner(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='owner_profile')
+    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name='owner_profile')
     bank_details = models.CharField(max_length=100)
 
     def __str__(self):
@@ -30,20 +31,35 @@ class Address(models.Model):
     def __str__(self):
         return f"{self.street}, {self.city}, {self.zip_code}, {self.country}"
 
-
-
 class ParkingSpot(models.Model):
     name = models.CharField(max_length=100)
     hourly_rate = models.DecimalField(max_digits=5, decimal_places=2, default=HOURLY_RATE)
     daily_rate = models.DecimalField(max_digits=5, decimal_places=2, default=DAILY_RATE)
     monthly_rate = models.DecimalField(max_digits=5, decimal_places=2, default=MONTHLY_RATE)
     owner = models.ForeignKey(Owner, on_delete=models.CASCADE, related_name='parking_spots')
-    address = models.OneToOneField(Address, on_delete=models.SET_NULL, null=True, blank=True)
+    address = models.ForeignKey(Address, on_delete=models.SET_NULL, null=True, blank=True, related_name='parking_spots')
     latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
     is_available_hourly = models.BooleanField(default=True)
     is_available_daily = models.BooleanField(default=True)
     is_available_monthly = models.BooleanField(default=True)
+
+    def update_availability(self):
+        # Получаем текущее время
+        now = timezone.now()
+
+        # Находим все активные бронирования для этого парковочного места
+        active_reservations = ParkingReservation.objects.filter(
+            parking_spot=self,
+            status="active",  # Предполагается, что "active" - статус активных бронирований
+            end_time__gt=now,  # Бронирования, которые еще не завершились
+        )
+
+        # Обновляем статус доступности парковочного места на основе активных бронирований
+        self.is_available_hourly = not active_reservations.filter(tariff="hourly").exists()
+        self.is_available_daily = not active_reservations.filter(tariff="daily").exists()
+        self.is_available_monthly = not active_reservations.filter(tariff="monthly").exists()
+        self.save()
 
     def __str__(self):
         return self.name
@@ -91,7 +107,7 @@ class Payment(models.Model):
         return f"Payment #{self.id}"
 
 class OwnerPayment(models.Model):
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='owner_payments')
+    owner = models.ForeignKey(Owner, on_delete=models.CASCADE, related_name='owner_payments')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_payments')
     payment = models.ForeignKey(Payment, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -101,8 +117,7 @@ class OwnerPayment(models.Model):
         return f"Owner Payment #{self.id}"
 
 class ParkingServiceFee(models.Model):
-    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='service_fees')
-    owner = models.ForeignKey('Owner', on_delete=models.CASCADE, related_name='service_fees')
+    owner = models.ForeignKey('User', on_delete=models.CASCADE, related_name='service_fees')
     reservation = models.ForeignKey('ParkingReservation', on_delete=models.CASCADE, related_name='service_fees')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     timestamp = models.DateTimeField(default=timezone.now)

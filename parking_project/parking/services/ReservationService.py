@@ -1,4 +1,6 @@
-from . import PaymentService
+from django.db import transaction
+
+from .PaymentService import PaymentService
 from .exceptions import PaymentFailedException
 from ..models import  ParkingReservation,ParkingSpot, Payment, OwnerPayment,ParkingServiceFee
 from django.utils import timezone
@@ -6,10 +8,12 @@ from datetime import datetime, timedelta
 
 
 class ReservationService:
-    def reserve_spot(self, user,owner, parking_id, start_time, end_time, tariff):
-        # находим выбранную парковку
-        spot=ParkingSpot.objects.get(pk=parking_id)
+    @transaction.atomic
+    def reserve_spot(self, user, owner, parking_id, start_time, end_time, tariff):
         try:
+            # находим выбранную парковку
+            spot = ParkingSpot.objects.get(pk=parking_id)
+
             # Проверяем доступность парковочного места
             if spot.is_available_hourly or spot.is_available_daily or spot.is_available_monthly:
                 # Проверяем, что указанное время бронирования не пересекается с другими бронированиями
@@ -21,10 +25,12 @@ class ReservationService:
                 if not existing_reservations.exists():
                     # Расчитываем сумму оплаты
                     payment_amount = PaymentService.calculate_payment_amount(tariff, start_time, end_time)
+
                     # Создаем новое бронирование
                     reservation = ParkingReservation(
                         user=user,
                         parking_spot=spot,
+                        start_time=start_time,  # Добавлено
                         end_time=end_time,
                     )
                     reservation.save()
@@ -33,7 +39,7 @@ class ReservationService:
                     spot.update_availability()
 
                     # Создаем запись об оплате
-                    payment = Payment (
+                    payment = Payment(
                         reservation=reservation,
                         user=user,
                         amount=payment_amount,
@@ -81,18 +87,7 @@ class ReservationService:
         except Exception as e:
             return f"Произошла ошибка при бронировании: {str(e)}"
 
-
-    def view_reservation_history(self, user):
-        try:
-            # Получить историю бронирований пользователя
-            reservations = ParkingReservation.objects.filter(user=user)
-
-            # Можете здесь произвести необходимую обработку и форматирование истории бронирований
-
-            return reservations  # Вернуть историю бронирований пользователя
-        except Exception as e:
-            return f"Произошла ошибка при получении истории бронирований: {str(e)}"
-
+    @transaction.atomic
     def cancel_reservation(self, user, reservation_id):
         try:
             # Найти бронирование по идентификатору и проверить, принадлежит ли оно данному пользователю
@@ -227,4 +222,6 @@ class ReservationService:
             return "Парковочное место с указанным ID не найдено."
         except Exception as e:
             return f"Произошла ошибка при запуске часового тарифа: {str(e)}"
+
+
 

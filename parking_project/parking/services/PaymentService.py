@@ -93,6 +93,3 @@ class PaymentService:
     def simulate_payment(self):
         # Возвращает True, предполагая, что оплата всегда проходит успешно
         return True
-
-
-

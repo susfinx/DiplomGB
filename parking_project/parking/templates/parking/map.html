@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leaflet Example</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+</head>
+<body>
+    <div id="mapid" style="width: 600px; height: 400px;"></div>
+    <script>
+        var mymap = L.map('mapid').setView([51.505, -0.09], 13); // Инициализация карты Leaflet
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(mymap);
+
+        // Загрузка и добавление GeoJSON на карту
+        fetch('/your-geojson-url/') // Используйте URL вашего GeoJSON представления
+            .then(response => response.json())
+            .then(data => {
+                L.geoJSON(data).addTo(mymap);
+            });
+    </script>
+</body>
+</html>
