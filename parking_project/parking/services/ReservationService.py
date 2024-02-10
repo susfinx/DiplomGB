@@ -109,87 +109,57 @@ class ReservationService:
         except Exception as e:
             return f"Произошла ошибка при отмене бронирования: {str(e)}"
 
-    def check_availability_hourly(self):
+    def update_parking_spot_availability(self):
+        problem_parking_spots = []
+        self.check_availability_hourly(problem_parking_spots)
+        self.check_availability_daily(problem_parking_spots)
+        self.check_availability_monthly(problem_parking_spots)
+        return problem_parking_spots
+
+    def check_availability_hourly(self, problem_parking_spots):
         now = timezone.now()
-        # Найдите бронирования с почасовым тарифом, которые завершились
         hourly_reservations = ParkingReservation.objects.filter(
             status="active",
             end_time__lte=now,
             tariff="hourly"
         )
-
-        # Обновите статус парковок, которые освободились после завершения бронирования
         for reservation in hourly_reservations:
             parking_spot = reservation.parking_spot
-            if parking_spot.is_available_hourly:
-                parking_spot.is_available_hourly = True
-                parking_spot.save()
+            sensor = parking_spot.sensor
+            if sensor.is_occupied:
+                problem_parking_spots.append(parking_spot)
+            reservation.status = "expired"
+            reservation.save()
 
-    def check_availability_daily(self):
+    def check_availability_daily(self, problem_parking_spots):
         now = timezone.now()
-        # Найдите бронирования с посуточным тарифом, которые завершились
         daily_reservations = ParkingReservation.objects.filter(
             status="active",
             end_time__lte=now,
             tariff="daily"
         )
-
-        # Обновите статус парковок, которые освободились после завершения бронирования
         for reservation in daily_reservations:
             parking_spot = reservation.parking_spot
-            if parking_spot.is_available_daily:
-                parking_spot.is_available_daily = True
-                parking_spot.save()
+            sensor = parking_spot.sensor
+            if sensor.is_occupied:
+                problem_parking_spots.append(parking_spot)
+            reservation.status = "expired"
+            reservation.save()
 
-    def check_availability_monthly(self):
+    def check_availability_monthly(self, problem_parking_spots):
         now = timezone.now()
-        # Найдите бронирования с помесячным тарифом, которые завершились
         monthly_reservations = ParkingReservation.objects.filter(
             status="active",
             end_time__lte=now,
             tariff="monthly"
         )
-
-        # Обновите статус парковок, которые освободились после завершения бронирования
         for reservation in monthly_reservations:
             parking_spot = reservation.parking_spot
-            if parking_spot.is_available_monthly:
-                parking_spot.is_available_monthly = True
-                parking_spot.save()
-
-    def update_parking_spot_availability(self):
-        self.check_availability_hourly()
-        self.check_availability_daily()
-        self.check_availability_monthly()
-
-    def find_expired_reservation_and_occupied_sensor(self):
-        try:
-            # Получаем текущее время
-            current_time = timezone.now()
-
-            # Находим все бронирования, у которых время окончания меньше текущего времени
-            expired_reservations = ParkingReservation.objects.filter(
-                end_time__lt=current_time,
-                status="active"  # Предполагается, что "active" - статус активных бронирований
-            )
-
-            # Создаем список для хранения парковок с проблемами
-            problem_parking_spots = []
-
-            # Перебираем и проверяем каждое бронирование
-            for reservation in expired_reservations:
-                spot = reservation.parking_spot
-                sensor = spot.sensor
-
-                # Проверяем, что датчик говорит, что парковка занята
-                if sensor.is_occupied:
-                    problem_parking_spots.append(spot)
-
-            return problem_parking_spots
-
-        except Exception as e:
-            # Обработка ошибок, если необходимо
-            return []
+            sensor = parking_spot.sensor
+            if sensor.is_occupied:
+                problem_parking_spots.append(parking_spot)
+            reservation.status = "expired"
+            reservation.save()
 
     def start_hourly_rate(self,parking_spot_id, user_id):
         try:

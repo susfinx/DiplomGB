@@ -12,6 +12,12 @@ BARIER_OPENING_DELAY_MINUTES = 10
 #авто закрытие всех бариеров
 CLOSE_ALL_BARRIER = '*/5'
 
+#Статусы бронирований
+STATUS_CHOICES = [
+    ('active', 'Active'),
+    ('expired', 'Expired'),
+    ('cancelled', 'Cancelled'),
+]
 # Обновление доступности парковки
 UPDATE_AVAILABLYTI = '*/5'
 

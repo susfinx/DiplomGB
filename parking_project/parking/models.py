@@ -1,6 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-from .constants import HOURLY_RATE, DAILY_RATE, MONTHLY_RATE
+from .constants import HOURLY_RATE, DAILY_RATE, MONTHLY_RATE, STATUS_CHOICES
 from django.utils import timezone
 
 class User(AbstractUser):
@@ -26,8 +26,6 @@ class Address(models.Model):
     city = models.CharField(max_length=100)
     zip_code = models.CharField(max_length=20)
     country = models.CharField(max_length=100)
-    latitude = models.FloatField(null=True, blank=True)
-    longitude = models.FloatField(null=True, blank=True)
     def __str__(self):
         return f"{self.street}, {self.city}, {self.zip_code}, {self.country}"
 
@@ -75,7 +73,6 @@ class ParkingSensor(models.Model):
 class Barrier(models.Model):
     name = models.CharField(max_length=100)
     is_open = models.BooleanField(default=False)
-    opening_delay = models.BooleanField(default=False)  # Поле задержки открытия (булевое значение)
     sensor = models.OneToOneField('ParkingSensor', on_delete=models.CASCADE, related_name='barrier')
     parking_spot = models.ForeignKey('ParkingSpot', on_delete=models.CASCADE, related_name='barriers')
 
@@ -87,7 +84,7 @@ class ParkingReservation(models.Model):
     parking_spot = models.ForeignKey(ParkingSpot, on_delete=models.CASCADE, related_name='reservations')
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
-    status = models.CharField(max_length=20, default="active")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
 
     def __str__(self):
         return f"Reservation by {self.user.username} for {self.parking_spot.name} from {self.start_time} to {self.end_time}"
