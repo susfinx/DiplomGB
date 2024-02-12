@@ -1,31 +1,29 @@
 from celery import Celery
 from celery.schedules import crontab
-from parking.constants import CLOSE_ALL_BARRIER, UPDATE_AVAILABLYTI, CHECK_EXPIRED
+from parking.constants import CLOSE_ALL_BARRIER, UPDATE_AVAILABILITY, CHECK_EXPIRED
 
-app = Celery('your_project')
 
-# Настройки брокера (Redis)
-app.conf.broker_url = 'redis://localhost:6379/0'  # URL для Redis
+# Загрузка конфигурации из настроек Django
 
-# Настройки для хранения результатов задач (Redis)
-app.conf.result_backend = 'redis://localhost:6379/1'  # URL для Redis (разный базовый индекс)
 
-# Настройка сериализации данных (JSON - рекомендуется)
-app.conf.task_serializer = 'json'
-app.conf.result_serializer = 'json'
-app.conf.accept_content = ['json']
+# Автоматическое обнаружение и регистрация задач из всех приложений Django
+
+
+app = Celery('parking_project')
+app.config_from_object('django.conf:settings', namespace='CELERY')
+app.autodiscover_tasks()
 
 CELERY_BEAT_SCHEDULE = {
     'close_barrier_every_5_minutes': {
-        'task': 'parking_project.tasks.close_barrier_task',  # Укажите здесь полный путь к задаче
-        'schedule': crontab(minute=CLOSE_ALL_BARRIER),  # Запускать каждые 5 минут
+        'task': 'parking_project.tasks.close_barrier_task',
+        'schedule': crontab(minute=CLOSE_ALL_BARRIER),
     },
     'update_parking_availability_every_5_minutes': {
-        'task': 'parking_project.tasks.update_parking_availability',  # Укажите полный путь к задаче
-        'schedule': crontab(minute=UPDATE_AVAILABLYTI),  # Запускать каждые 5 минут
+        'task': 'parking_project.tasks.update_parking_availability',
+        'schedule': crontab(minute=UPDATE_AVAILABILITY),
     },
     'check_expired_reservations_and_start_hourly_rates': {
-        'task': 'parking_project.tasks.check_expired_reservations_and_start_hourly_rates',  # Укажите полный путь к задаче
-        'schedule': crontab(minute=CHECK_EXPIRED),  # Запускать каждые 15 минут
+        'task': 'parking_project.tasks.check_expired_reservations_and_start_hourly_rates',
+        'schedule': crontab(minute=CHECK_EXPIRED),
     },
 }

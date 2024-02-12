@@ -1,83 +1,77 @@
 from django.db import transaction
-
+from dateutil.relativedelta import relativedelta
+from .ParkingSpotService import ParkingSpotService
 from .PaymentService import PaymentService
 from .exceptions import PaymentFailedException
-from ..models import  ParkingReservation,ParkingSpot, Payment, OwnerPayment,ParkingServiceFee
+from ..models import ParkingReservation, ParkingSpot, Payment, OwnerPayment, ParkingServiceFee
 from django.utils import timezone
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 
 class ReservationService:
     @transaction.atomic
-    def reserve_spot(self, user, owner, parking_id, start_time, end_time, tariff):
+    def reserve_spot(self, user, owner, parking_id, tariff, duration):
+
+        start_time, end_time = self.calculate_end_time(duration, tariff)
+
         try:
-            # находим выбранную парковку
             spot = ParkingSpot.objects.get(pk=parking_id)
 
-            # Проверяем доступность парковочного места
-            if spot.is_available_hourly or spot.is_available_daily or spot.is_available_monthly:
+            # Проверка доступности парковочного места в зависимости от тарифа
+            if getattr(spot, f'is_available_{tariff}', False):
                 # Проверяем, что указанное время бронирования не пересекается с другими бронированиями
-                existing_reservations = ParkingReservation.objects.filter(
-                    parking_spot=spot,
-                    end_time__gte=start_time,
-                    start_time__lte=end_time,  # Исправлено на start_time__lte
-                )
-                if not existing_reservations.exists():
-                    # Расчитываем сумму оплаты
+                if not ParkingReservation.objects.filter(parking_spot=spot, end_time__gte=start_time,
+                                                         start_time__lte=end_time).exists():
+                    # Расчет суммы оплаты
                     payment_amount = PaymentService.calculate_payment_amount(tariff, start_time, end_time)
 
-                    # Создаем новое бронирование
-                    reservation = ParkingReservation(
+                    # Создание нового бронирования с указанием тарифа
+                    reservation = ParkingReservation.objects.create(
                         user=user,
                         parking_spot=spot,
-                        start_time=start_time,  # Добавлено
+                        start_time=start_time,
                         end_time=end_time,
+                        status='active',  # Установка статуса бронирования
+                        tariff=tariff
                     )
-                    reservation.save()
 
-                    # Обновляем доступность парковочного места
-                    spot.update_availability()
+                    # Обновление доступности парковочного места
+                    ParkingSpotService.update_availability(parking_spot_id=spot.id)
 
-                    # Создаем запись об оплате
-                    payment = Payment(
+                    # Создание записи об оплате
+                    payment = Payment.objects.create(
                         reservation=reservation,
                         user=user,
                         amount=payment_amount,
-                        tariff=tariff,
-                        timestamp=datetime.now(),  # Добавляем текущую дату и время оплаты
+                        payment_date=timezone.now(),
                     )
-                    payment.save()
 
-                    # Вычисляем сумму комиссии за сервис
-                    service_fee = PaymentService.calculate_service_fee(payment_amount)
-                    service_fee_entry = ParkingServiceFee(
-                        user=user,  # Пользователь, для которого была комиссия
-                        owner=owner,  # Владелец (если требуется)
-                        reservation=reservation,  # Бронирование (если требуется)
-                        amount=service_fee,  # Сумма комиссии
+                    # Вычисление суммы комиссии за сервис
+                    service_fee = PaymentService.calculate_service_fee(total_amount=Decimal(payment_amount))
+                    owner = spot.owner
+                    ParkingServiceFee.objects.create(
+                        owner=owner,
+                        reservation=reservation,
+                        amount=service_fee,
                     )
-                    service_fee_entry.save()
 
-                    # Попытка симулированной оплаты, вернет True если прошла успешно, иначе False
-                    if PaymentService.simulate_payment(self):
-                        # Вычисляем сумму оплаты владельцу с учетом комиссии
-                        owner_payment_amount = payment_amount - service_fee
+                    # Попытка имитации оплаты
+                    if PaymentService.simulate_payment():
+                        owner_payment_amount = Decimal(payment_amount) - service_fee
 
-                        # Отправляем оплату владельцу
-                        owner_payment = OwnerPayment(
+                        OwnerPayment.objects.create(
                             owner=spot.owner,
                             user=user,
                             payment=payment,
                             amount=owner_payment_amount,
                         )
-                        owner_payment.save()
 
-                        return "Парковочное место успешно забронировано."
+                        return "Парковочное место успешно забронировано"
                     else:
                         # Если оплата не прошла, отменяем бронирование
                         reservation.delete()
                         raise PaymentFailedException("Оплата не прошла")
-
                 else:
                     return "Указанное время уже забронировано для этого парковочного места."
             else:
@@ -87,7 +81,21 @@ class ReservationService:
         except Exception as e:
             return f"Произошла ошибка при бронировании: {str(e)}"
 
-    @transaction.atomic
+    @staticmethod
+    def calculate_end_time(duration, tariff):
+        current_time = timezone.now()
+        if tariff == "hourly":
+            end_time = current_time + timedelta(hours=duration)
+        elif tariff == "daily":
+            end_time = current_time + timedelta(days=duration)
+        elif tariff == "monthly":
+            end_time = current_time + relativedelta(months=duration)
+        else:
+            # Если тариф неизвестен, можно выбрасывать исключение или возвращать None
+            raise ValueError("Unknown tariff")
+
+        return current_time, end_time
+
     def cancel_reservation(self, user, reservation_id):
         try:
             # Найти бронирование по идентификатору и проверить, принадлежит ли оно данному пользователю
@@ -95,11 +103,11 @@ class ReservationService:
 
             if reservation.status == "active":
                 # Если бронирование активно, отменить его
-                reservation.status = "canceled"
+                reservation.status = "cancelled"
                 reservation.save()
 
                 # Обновить доступность парковочного места
-                reservation.parking_spot.update_availability()
+                ParkingSpotService.update_availability(parking_spot_id=reservation.parking_spot.id)
 
                 return "Бронирование успешно отменено."
             else:

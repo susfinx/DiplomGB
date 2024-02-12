@@ -18,8 +18,15 @@ STATUS_CHOICES = [
     ('expired', 'Expired'),
     ('cancelled', 'Cancelled'),
 ]
+# Статусы Бронирования
+TARIFF_CHOICES = [
+    ('hourly', 'Hourly'),
+    ('daily', 'Daily'),
+    ('monthly', 'Monthly'),
+]
+
 # Обновление доступности парковки
-UPDATE_AVAILABLYTI = '*/5'
+UPDATE_AVAILABILITY = '*/5'
 
 CHECK_EXPIRED = '*/15'
 

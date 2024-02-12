@@ -1,6 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-from .constants import HOURLY_RATE, DAILY_RATE, MONTHLY_RATE, STATUS_CHOICES
+from .constants import HOURLY_RATE, DAILY_RATE, MONTHLY_RATE, STATUS_CHOICES, TARIFF_CHOICES
 from django.utils import timezone
 
 class User(AbstractUser):
@@ -42,23 +42,6 @@ class ParkingSpot(models.Model):
     is_available_daily = models.BooleanField(default=True)
     is_available_monthly = models.BooleanField(default=True)
 
-    def update_availability(self):
-        # Получаем текущее время
-        now = timezone.now()
-
-        # Находим все активные бронирования для этого парковочного места
-        active_reservations = ParkingReservation.objects.filter(
-            parking_spot=self,
-            status="active",  # Предполагается, что "active" - статус активных бронирований
-            end_time__gt=now,  # Бронирования, которые еще не завершились
-        )
-
-        # Обновляем статус доступности парковочного места на основе активных бронирований
-        self.is_available_hourly = not active_reservations.filter(tariff="hourly").exists()
-        self.is_available_daily = not active_reservations.filter(tariff="daily").exists()
-        self.is_available_monthly = not active_reservations.filter(tariff="monthly").exists()
-        self.save()
-
     def __str__(self):
         return self.name
 
@@ -85,7 +68,8 @@ class ParkingReservation(models.Model):
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
-
+    tariff = models.CharField(max_length=7, choices=TARIFF_CHOICES, default='hourly')
+    duration = models.IntegerField(default=1)
     def __str__(self):
         return f"Reservation by {self.user.username} for {self.parking_spot.name} from {self.start_time} to {self.end_time}"
 
@@ -98,7 +82,6 @@ class Payment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     payment_date = models.DateTimeField(auto_now_add=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    tariff = models.CharField(max_length=50)
 
     def __str__(self):
         return f"Payment #{self.id}"
@@ -114,7 +97,7 @@ class OwnerPayment(models.Model):
         return f"Owner Payment #{self.id}"
 
 class ParkingServiceFee(models.Model):
-    owner = models.ForeignKey('User', on_delete=models.CASCADE, related_name='service_fees')
+    owner = models.ForeignKey('Owner', on_delete=models.CASCADE, related_name='service_fees')
     reservation = models.ForeignKey('ParkingReservation', on_delete=models.CASCADE, related_name='service_fees')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     timestamp = models.DateTimeField(default=timezone.now)

@@ -1,9 +1,9 @@
 import logging
 from django.utils import timezone
-from datetime import timedelta, timezone
+from datetime import timedelta
 from ..constants import BARIER_OPENING_DELAY_MINUTES
 from ..models import Barrier, ParkingReservation
-from parking_project.tasks import close_barrier_delayed
+
 
 class BarierService:
 
@@ -29,8 +29,8 @@ class BarierService:
         if sensor.is_occupied:
             return "Место занято. Доступ запрещен."
 
-        # Если место свободно, открываем барьер
-        self.open_barrier_mechanism()
+        # Если место свободно, Логика открытия механизма непосредственно.
+
 
         # Создаем время окончания задержки (используя значение из константы)
 
@@ -38,6 +38,8 @@ class BarierService:
         barrier.save()
 
         delay_end_time = timezone.now() + timedelta(minutes=BARIER_OPENING_DELAY_MINUTES)
+
+        from tasks import close_barrier_delayed
         close_barrier_delayed.apply_async(args=[barrier.pk, delay_end_time], eta=delay_end_time)
 
         return "Барьер успешно открыт."
@@ -57,7 +59,8 @@ class BarierService:
                 # Если датчик сигнализирует, что место свободно, закрываем механизм
                 logging.info(f"Запорный механизм {barrier.name} успешно закрыт.")
 
-                self.close_barrier_mechanism(barrier)
+                # Вызываем переданную функцию close_barrier_delayed_func
+                self.close_barrier_mechanism(barrier.pk)
 
                 barrier.is_open = False  # Обновляем статус барьера как закрытый
                 barrier.save()
@@ -78,6 +81,3 @@ class BarierService:
         # Реализация закрытия механизма
         pass
 
-    def open_barrier_mechanism(self, barrier):
-        # Реализация закрытия механизма
-        pass

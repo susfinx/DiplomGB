@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -32,6 +33,7 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     'parking',
+    'rest_framework',
     'django_extensions',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -126,7 +128,31 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'parking.User'
 
-GDAL_LIBRARY_PATH = 'C:\\OSGeo4W\\bin\\gdal308.dll'
-GEOS_LIBRARY_PATH = 'C:\\OSGeo4W\\bin\\geos.dll'
+
+# Celery Configuration
+# settings.py
+
+# Настройки Celery
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  # URL для Redis
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'  # URL для Redis (разный базовый индекс)
+
+# Настройка сериализации данных (JSON - рекомендуется)
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ['json']
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
+
+
+
+
 
 

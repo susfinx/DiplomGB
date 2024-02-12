@@ -19,9 +19,6 @@ class PaymentService:
         elif tariff == "monthly":
             monthly_rate = MONTHLY_RATE
             total_amount = monthly_rate
-        else:
-            # Если выбран неизвестный тариф, вернем 0
-            total_amount = 0
 
         return total_amount
 
@@ -77,7 +74,8 @@ class PaymentService:
         except Exception as e:
             return f"Произошла ошибка при получении истории платежей: {str(e)}"
 
-    def calculate_service_fee(self, total_amount):
+    @staticmethod
+    def calculate_service_fee(total_amount):
         """
         Рассчитывает комиссию на основе бронирования и общей суммы.
 
@@ -89,7 +87,7 @@ class PaymentService:
         service_fee = total_amount * service_fee_percentage
 
         return service_fee
-
-    def simulate_payment(self):
+    @staticmethod
+    def simulate_payment():
         # Возвращает True, предполагая, что оплата всегда проходит успешно
         return True

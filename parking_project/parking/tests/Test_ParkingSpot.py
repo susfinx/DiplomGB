@@ -1,7 +1,9 @@
 from django.test import TestCase
-from ..models import ParkingSpot, Owner, User
+from django.contrib.auth import get_user_model
+from parking.models import ParkingSpot, Owner
+from parking.services.ParkingSpotService import ParkingSpotService
 
-
+User = get_user_model()
 class ParkingSpotTest(TestCase):
     def setUp(self):
         # Здесь создаем тестового пользователя и владельца парковки для использования в тесте
@@ -25,3 +27,15 @@ class ParkingSpotTest(TestCase):
         self.assertTrue(spot.is_available_daily)
         self.assertTrue(spot.is_available_monthly)
         self.assertEqual(str(spot), 'Test Parking Spot')
+
+    def test_update_availability_with_no_reservations(self):
+        # Создаем экземпляр ParkingSpot без бронирований
+        user = User.objects.create(username='test_user')
+        owner = Owner.objects.create(user=user)
+        spot = ParkingSpot.objects.create(name="Test Spot", owner=owner)
+        spotService = ParkingSpotService()
+        spotService.update_availability(parking_spot_id=spot.id)
+        # Проверяем, что все тарифы доступны
+        self.assertTrue(spot.is_available_hourly)
+        self.assertTrue(spot.is_available_daily)
+        self.assertTrue(spot.is_available_monthly)

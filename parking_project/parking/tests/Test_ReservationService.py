@@ -1,8 +1,11 @@
 from django.test import TestCase
-from datetime import timedelta, datetime, timezone
-from ..services.ReservationService import ReservationService
-from ..models import ParkingSpot, ParkingReservation, User, Owner
+from django.utils import timezone
+from django.contrib.auth import get_user_model
+from datetime import timedelta
+from parking.models import ParkingSpot, ParkingReservation, Owner
+from parking.services.ReservationService import ReservationService
 
+User = get_user_model()
 
 class ReservationServiceTest(TestCase):
     def setUp(self):
@@ -18,81 +21,27 @@ class ReservationServiceTest(TestCase):
         )
         self.service = ReservationService()
 
-    class ReservationServiceTest(TestCase):
-        def test_reserve_spot_success(self):
-            # Создаем парковочное место
-            spot = ParkingSpot.objects.create()  # Создайте парковочное место с нужными параметрами
+    def test_reserve_spot_success(self):
+        # Тест на успешное создание бронирования
+        start_time = timezone.now()
+        result = self.service.reserve_spot(self.user, self.owner, self.spot.id, "hourly",1)
+        self.assertIn("Парковочное место успешно забронировано", result)
 
-            # Создаем экземпляр сервиса бронирования
-            service = ReservationService()
+    def test_cancel_reservation_success(self):
+        # Подготовка данных для теста отмены бронирования
+        start_time = timezone.now() - timedelta(hours=2)
+        end_time = start_time + timedelta(hours=1)
+        reservation = ParkingReservation.objects.create(
+            user=self.user,
+            parking_spot=self.spot,
+            start_time=start_time,
+            end_time=end_time,
+            status='active'
+        )
 
-            # Задаем значения для теста
-            user = "test_user"
-            owner = "test_owner"
-            parking_id = spot.id
-            start_time = datetime.now()
-            end_time = start_time + timedelta(hours=1)
-            tariff = "hourly"  # Передаем нужный тариф
+        # Тест на успешную отмену бронирования
+        result = self.service.cancel_reservation(self.user.id, reservation.id)
+        reservation.refresh_from_db()  # Обновляем информацию о бронировании из БД
 
-            # Вызываем метод reserve_spot с заданными параметрами
-            result = service.reserve_spot(user, owner, parking_id, start_time, end_time, tariff)
-
-            # Проверяем результат
-            self.assertIn("успешно забронировано", result)
-
-    # Добавьте больше тестов для проверки различных сценариев и ошибок
-    class CancelReservationTest(TestCase):
-        def setUp(self):
-            # Создаем парковочное место и бронирование для теста
-            self.parking_spot = ParkingSpot.objects.create(name="Test Parking Spot")
-            self.user = User.objects.create(username="test_user")
-            self.reservation = ParkingReservation.objects.create(
-                user=self.user,
-                parking_spot=self.parking_spot,
-                start_time=timezone.now(),
-                end_time=timezone.now() + timedelta(hours=1),
-                status="active"
-            )
-
-        def test_cancel_reservation_success(self):
-            # Создаем экземпляр сервиса бронирования
-            reservation_service = ReservationService()
-
-            # Отменяем бронирование
-            result = reservation_service.cancel_reservation(self.user, self.reservation.id)
-
-            # Проверяем, что бронирование успешно отменено
-            self.assertEqual(result, "Бронирование успешно отменено.")
-
-            # Проверяем, что статус бронирования изменился на "canceled"
-            updated_reservation = ParkingReservation.objects.get(id=self.reservation.id)
-            self.assertEqual(updated_reservation.status, "canceled")
-
-            # Проверяем, что доступность парковочного места была обновлена
-            updated_spot = ParkingSpot.objects.get(id=self.parking_spot.id)
-            self.assertTrue(updated_spot.is_available())
-
-        def test_cancel_nonexistent_reservation(self):
-            # Создаем экземпляр сервиса бронирования
-            reservation_service = ReservationService()
-
-            # Пытаемся отменить несуществующее бронирование
-            result = reservation_service.cancel_reservation(self.user, 999)
-
-            # Проверяем, что возвращается соответствующее сообщение об ошибке
-            self.assertEqual(result, "Бронирование с указанным идентификатором не найдено.")
-
-        def test_cancel_already_canceled_reservation(self):
-            # Устанавливаем статус бронирования в "canceled"
-            self.reservation.status = "canceled"
-            self.reservation.save()
-
-            # Создаем экземпляр сервиса бронирования
-            reservation_service = ReservationService()
-
-            # Пытаемся отменить уже отмененное бронирование
-            result = reservation_service.cancel_reservation(self.user, self.reservation.id)
-
-            # Проверяем, что возвращается соответствующее сообщение об ошибке
-            self.assertEqual(result,
-                             "Невозможно отменить это бронирование, так как оно уже отменено или завершено.")
+        self.assertIn("Бронирование успешно отменено", result)
+        self.assertEqual(reservation.status, "cancelled")
