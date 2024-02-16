@@ -3,12 +3,12 @@ import logging
 from django.db import transaction
 
 from ..models import Owner, Address, ParkingSpot, ParkingSensor, Barrier, ParkingReservation, OwnerPayment
-from ..services import QRCodeService
+from ..services import QRCodeService, geolocation
 
 class OwnerService:
 
     @transaction.atomic
-    def add_parking_spot(self, user, name, hourly_rate, daily_rate, monthly_rate, address, latitude, longitude):
+    def add_parking_spot(self, user, name, hourly_rate, daily_rate, monthly_rate, street, city, zip_code, country, latitude, longitude):
         try:
             # Проверяем, является ли пользователь владельцем
             owner = Owner.objects.filter(user=user).first()
@@ -23,10 +23,10 @@ class OwnerService:
 
             # Проверяем, существует ли адрес в базе данных
             existing_address = Address.objects.filter(
-                street=address['street'],
-                city=address['city'],
-                zip_code=address['zip_code'],
-                country=address['country']
+                street=street['street'],
+                city=city['city'],
+                zip_code=zip_code['zip_code'],
+                country=country['country']
             ).first()
 
             # Если адрес существует, используем его, иначе создаем новый
@@ -34,10 +34,10 @@ class OwnerService:
                 spot_address = existing_address
             else:
                 spot_address = Address(
-                    street=address['street'],
-                    city=address['city'],
-                    zip_code=address['zip_code'],
-                    country=address['country'],
+                    street=street['street'],
+                    city=city['city'],
+                    zip_code=zip_code['zip_code'],
+                    country=country['country'],
                 )
                 spot_address.save()
 
@@ -65,8 +65,10 @@ class OwnerService:
             # Генерируем QR-код и сохраняем его в базе данных
             qr_code = QRCodeService.generate_qr_code(name, spot.id)
 
+            qr_code_img = qr_code.get_image_url()
+
             # Логирование события
-            logging.info(f"Добавлено новое парковочное место: {spot}")
+            logging.info(f"Добавлено новое парковочное место: {spot}, QR код {qr_code_img}")
 
             return "Парковочное место успешно добавлено."
         except Exception as e:

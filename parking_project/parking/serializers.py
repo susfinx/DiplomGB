@@ -56,8 +56,17 @@ class ParkingServiceFeeSerializer(serializers.ModelSerializer):
         model = ParkingServiceFee
         fields = ['owner', 'reservation', 'amount', 'timestamp']
 
-
-
 class OpenBarrierRequestSerializer(serializers.Serializer):
     user_id = serializers.IntegerField(help_text="Идентификатор пользователя, запрашивающего открытие барьера")
     parking_spot_id = serializers.IntegerField(help_text="Идентификатор парковочного места, для которого требуется открыть барьер")
+
+# Новые сериализаторы
+class BecomeOwnerRequestSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    bank_details = serializers.CharField(max_length=255)
+    address_id = serializers.IntegerField()  # Предполагается, что адрес уже добавлен в базу данных
+
+class AddAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = ['street', 'city', 'zip_code', 'country']
