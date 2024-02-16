@@ -41,17 +41,17 @@ def check_expired_reservations_and_start_hourly_rates():
     # Создайте экземпляр сервиса ReservationService
     reservation_service = ReservationService()
 
-    # Вызовите метод для поиска и обработки истекших бронирований и занятых сенсоров
+    # метод для поиска и обработки истекших бронирований и занятых сенсоров
     problem_reservations = reservation_service.update_parking_spot_availability()
 
     for problem_reservation in problem_reservations:
-        # Вам нужно получить ID парковочного места и ID пользователя из проблемного бронирования.
+        # получить ID парковочного места и ID пользователя из проблемного бронирования.
         # Предположим, что problem_reservation содержит информацию о парковочном месте и пользователе.
 
         parking_spot_id = problem_reservation.parking_spot.id
         user_id = problem_reservation.user.id
 
-        # Затем запускайте часовой тариф для каждой проблемной парковки и пользователя
+        # часовой тариф для каждой проблемной парковки и пользователя
         reservation_service.start_hourly_rate(parking_spot_id, user_id)
 
     return "Бронирование продлено на час."
